@@ -1,6 +1,3 @@
-"Connecting to Azure" | Write-Output
-$null = Connect-AzAccount -Identity
-
 "Getting Variables" | Write-Output
 $Site = Get-AutomationVariable -Name Site -ErrorAction Stop
 $DIDDepartmentMapName = Get-AutomationVariable DIDDepartmentMapName -ErrorAction Stop
@@ -10,6 +7,7 @@ $ReportName = Get-AutomationVariable -Name ReportName -ErrorAction Stop
 
 "Connecting to https://${SharePointDomain}.sharepoint.com/sites/${Site}" | Write-Output
 try {
+    $env:PNPPOWERSHELL_UPDATECHECK='Off'
     $null = Connect-PnPOnline -Url "https://${SharePointDomain}.sharepoint.com/sites/${Site}" -ManagedIdentity -ErrorAction Stop
 }
 catch {
@@ -18,7 +16,7 @@ catch {
 }
 
 "Getting Current Site Owners" | Write-Output
-$Owners = Get-PnPUser "$Site Owners" -ErrorAction Stop
+$Owners = Get-PnPGroup "$Site Owners" -ErrorAction Stop
 
 "Getting or Creating the DID <-> Department Map List" | Write-Output
 $DIDList = & {

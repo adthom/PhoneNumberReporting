@@ -4,7 +4,8 @@ param(
     $Department,
 
     [Parameter(Mandatory,ValueFromPipelineByPropertyName)]
-    [string]
+    [ValidateRange(10000000000,19999999999)]
+    [double]
     $DID,
 
     [Parameter(Mandatory)]
@@ -33,7 +34,7 @@ param(
 )
 
 begin {
-    Connect-PnPOnline -Url "https://${SharePointDomain}.sharepoint.com/sites/${Site}" -ManagedIdentity
+    Connect-PnPOnline -Url "https://${SharePointDomain}.sharepoint.com/sites/${Site}" -Interactive -ErrorAction Stop
     
     $DIDList = Get-PnPList -Identity $DIDDepartmentMapName
     $RBACList = Get-PnPList -Identity $RBACListName

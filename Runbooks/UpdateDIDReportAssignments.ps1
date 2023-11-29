@@ -1,6 +1,3 @@
-"Connecting to Azure" | Write-Output
-$null = Connect-AzAccount -Identity
-
 "Getting Variables" | Write-Output
 $Site = Get-AutomationVariable -Name Site -ErrorAction Stop
 $SharePointDomain = Get-AutomationVariable -Name SharePointDomain -ErrorAction Stop
@@ -8,6 +5,7 @@ $ReportName = Get-AutomationVariable -Name ReportName -ErrorAction Stop
 
 "Connecting to https://${SharePointDomain}.sharepoint.com/sites/${Site}" | Write-Output
 try {
+    $env:PNPPOWERSHELL_UPDATECHECK='Off'
     $null = Connect-PnPOnline -Url "https://${SharePointDomain}.sharepoint.com/sites/${Site}" -ManagedIdentity -ErrorAction Stop
 }
 catch {
@@ -37,7 +35,7 @@ $GetPhoneNumberAssignmentParams = @{
 $NumberLookup = @{}
 do {
     "Getting next $($GetPhoneNumberAssignmentParams['Top']) numbers" | Write-Output
-    $Results = @(try{Get-CsPhoneNumberAssignment @GetPhoneNumberAssignmentParams | Select-Object TelephoneNumber, AssignedPstnTargetId}catch {Write-Error $_; throw})
+    $Results = @(try { Get-CsPhoneNumberAssignment @GetPhoneNumberAssignmentParams | Select-Object TelephoneNumber, AssignedPstnTargetId }catch { Write-Error $_; throw })
     $GetPhoneNumberAssignmentParams['Skip'] = $GetPhoneNumberAssignmentParams['Top'] + $GetPhoneNumberAssignmentParams['Skip']
     $Results | ForEach-Object {
         $Number = $_.TelephoneNumber
@@ -60,7 +58,7 @@ $ListResults | ForEach-Object -Begin { $i = 0 } -Process {
     $AssignedIdentity = if ($AssignmentInfo.AssignedPstnTargetId) { (Get-CsOnlineUser -Identity $AssignmentInfo.AssignedPstnTargetId).UserPrincipalName } else { $null }
     if ($AssignedIdentity -ne $_.FieldValues['AssignedIdentity'].Email) {
         $changes++
-        Set-PnPListItem -List $ReportList -Identity $_.Id -Values @{AssignedIdentity = $AssignedIdentity } -Batch $batch
+        Set-PnPListItem -List $ReportList -Identity $_.Id -Values @{ AssignedIdentity = $AssignedIdentity } -Batch $batch
     }
     if ((++$i % 250) -eq 0) { "$i rows of $($ListResults.Count) processed" | Write-Output }
 } -End { "$i rows of $($ListResults.Count) processed" | Write-Output }

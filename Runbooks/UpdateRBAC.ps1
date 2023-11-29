@@ -1,6 +1,3 @@
-"Connecting to Azure" | Write-Output
-$null = Connect-AzAccount -Identity
-
 "Getting Variables" | Write-Output
 $Site = Get-AutomationVariable -Name Site -ErrorAction Stop
 $SharePointDomain = Get-AutomationVariable -Name SharePointDomain -ErrorAction Stop
@@ -9,6 +6,7 @@ $ReportName = Get-AutomationVariable -Name ReportName -ErrorAction Stop
 
 "Connecting to https://${SharePointDomain}.sharepoint.com/sites/${Site}" | Write-Output
 try {
+    $env:PNPPOWERSHELL_UPDATECHECK='Off'
     $null = Connect-PnPOnline -Url "https://${SharePointDomain}.sharepoint.com/sites/${Site}" -ManagedIdentity -ErrorAction Stop
 }
 catch {
@@ -17,7 +15,7 @@ catch {
 }
 
 "Getting Current Site Owners" | Write-Output
-$Owners = Get-PnPUser "$Site Owners" -ErrorAction Stop
+$Owners = Get-PnPGroup "$Site Owners" -ErrorAction Stop
 "Getting Current RBAC List" | Write-Output
 $RBACList = Get-PnPList $RBACListName -ErrorAction Stop
 "Getting Current Report List" | Write-Output

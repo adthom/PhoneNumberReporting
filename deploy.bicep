@@ -8,7 +8,7 @@ param SharePointDomain string
 param Site string = 'PhoneNumberManagement'
 
 @description('The location of the runbooks')
-param RunbookFileLocationBaseUri string = 'https://raw.githubusercontent.com/adthom/PhoneNumberReporting/main/Runbooks'
+param RunbookFileLocationBaseUri string = 'https://raw.githubusercontent.com/adthom/PhoneNumberReporting/main/Runbooks/'
 
 @description('The location of the automation account, defaults to the resource group location')
 param location string = resourceGroup().location
@@ -28,9 +28,10 @@ param scheduleStart string = dateTimeAdd(utcNow(), 'PT1H')
 var verboseEnabled = true
 var progressEnabled = false
 var traceLevel = 0
-var powerShellVersion = 'PowerShell7'
+var powerShellVersion = 'PowerShell'
 
-var PSGalleryUri = 'https://www.powershellgallery.com/packages/'
+var PSGalleryUri = 'https://devopsgallerystorage.blob.${environment().suffixes.storage}/packages/'
+
 var neededModules = [
     {
         name: 'MicrosoftTeams'
@@ -38,11 +39,7 @@ var neededModules = [
     }
     {
         name: 'PnP.PowerShell'
-        version: '2.2.0'
-    }
-    {
-        name: 'Az'
-        version: '11.0.0'
+        version: '1.12.0'
     }
 ]
 var neededVariables = [
@@ -122,7 +119,7 @@ resource automationAccount 'Microsoft.Automation/automationAccounts@2022-08-08' 
         name: module.name
         properties: {
             contentLink: {
-                uri: uri(PSGalleryUri, '${module.name}/${module.version}')
+                uri: uri(PSGalleryUri, '${toLower(module.name)}.${module.version}.nupkg')
             }
         }
     }]
@@ -143,19 +140,16 @@ resource automationAccount 'Microsoft.Automation/automationAccounts@2022-08-08' 
 
     resource adhocRunbooks 'runbooks' = [for runbook in neededAdhocRunbooks: {
         name: runbook
+        location: location
         properties: {
             runbookType: powerShellVersion
             logVerbose: verboseEnabled
             logProgress: progressEnabled
             logActivityTrace: traceLevel
-            draft: {
-                inEdit: false
-                draftContentLink: {
-                    uri: uri(RunbookFileLocationBaseUri, '${runbook}.ps1')
-                }
+            publishContentLink: {
+                uri: uri(RunbookFileLocationBaseUri, '${runbook}.ps1')
             }
         }
-
         dependsOn: [ 
             variables
             modules
@@ -164,16 +158,14 @@ resource automationAccount 'Microsoft.Automation/automationAccounts@2022-08-08' 
 
     resource scheduledRunbooks 'runbooks' = [for runbook in neededScheduledRunbooks: {
         name: runbook.name
+        location: location
         properties: {
             runbookType: powerShellVersion
             logVerbose: verboseEnabled
             logProgress: progressEnabled
             logActivityTrace: traceLevel
-            draft: {
-                inEdit: false
-                draftContentLink: {
-                    uri: uri(RunbookFileLocationBaseUri, '${runbook.name}.ps1')
-                }
+            publishContentLink: {
+                uri: uri(RunbookFileLocationBaseUri, '${runbook.name}.ps1')
             }
         }
         dependsOn: [ 
@@ -184,7 +176,7 @@ resource automationAccount 'Microsoft.Automation/automationAccounts@2022-08-08' 
     }]
 
     resource jobSchedules 'jobSchedules' = [for runbook in neededScheduledRunbooks: {
-        name: runbook.name
+        name: guid(runbook.name)
         properties: {
             schedule: {
                 name: runbook.schedulename
