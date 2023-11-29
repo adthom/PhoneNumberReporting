@@ -1,14 +1,17 @@
 @description('The name of the automation account')
-param automationAccountName string
+param automationAccountName string = '${resourceGroup().name}automation'
 
-@description('The location of the automation account, defaults to the resource group location')
-param location string = resourceGroup().location
+@description('The SharePoint domain to use for the SharePoint Lists')
+param SharePointDomain string
+
+@description('The name of the SharePoint site to use for the SharePoint Lists')
+param Site string = 'PhoneNumberManagement'
 
 @description('The location of the runbooks')
 param RunbookFileLocationBaseUri string = 'https://raw.githubusercontent.com/adthom/PhoneNumberReporting/main/Runbooks'
 
-@description('The SharePoint domain to use for the SharePoint Lists')
-param SharePointDomain string
+@description('The location of the automation account, defaults to the resource group location')
+param location string = resourceGroup().location
 
 @description('The name of the DID <-> Department Map SharePoint List')
 param DIDDepartmentMap string = 'DID-Department Map'
@@ -19,15 +22,15 @@ param RBACList string = 'Report RBAC'
 @description('The name of the Report SharePoint List')
 param Report string = 'Phone Number Report'
 
-@description('The name of the SharePoint site to use for the SharePoint Lists')
-param Site string = 'PhoneNumberManagement'
+@description('The time to start the schedule in ISO 8601 format, defaults to 1 hour from now, must be more than 5 minutes from now')
+param scheduleStart string = dateTimeAdd(utcNow(), 'PT1H')
 
 var verboseEnabled = true
 var progressEnabled = false
 var traceLevel = 0
 var powerShellVersion = 'PowerShell7'
 
-var PSGalleryUri = 'https://www.powershellgallery.com/api/v2/package'
+var PSGalleryUri = 'https://www.powershellgallery.com/packages/'
 var neededModules = [
     {
         name: 'MicrosoftTeams'
@@ -82,7 +85,7 @@ var neededScheduledRunbooks = [
         name: 'UpdateRBAC'
         schedulename: 'RBAC Update Schedule'
         schedule: {
-            startTime: dateTimeFromEpoch(0)
+            startTime: scheduleStart
             interval: 4
             frequency: 'Hour'
         }
@@ -91,7 +94,7 @@ var neededScheduledRunbooks = [
         name: 'UpdateDIDReportAssignments'
         schedulename: 'Daily Update Assignments Schedule'
         schedule: {
-            startTime: dateTimeFromEpoch(0)
+            startTime: scheduleStart
             interval: 1
             frequency: 'Day'
         }
@@ -129,7 +132,7 @@ resource automationAccount 'Microsoft.Automation/automationAccounts@2022-08-08' 
         properties: {
             description: variable.description
             isEncrypted: false
-            value: variable.value
+            value: '"${variable.value}"'
         }
     }]
 
@@ -190,6 +193,10 @@ resource automationAccount 'Microsoft.Automation/automationAccounts@2022-08-08' 
                 name: runbook.name
             }
         }
+        dependsOn: [ 
+            scheduledRunbooks
+            schedules
+        ]
     }]
 }
 
