@@ -1,6 +1,7 @@
 "Getting Variables" | Write-Output
 $Site = Get-AutomationVariable -Name Site -ErrorAction Stop
 $SharePointDomain = Get-AutomationVariable -Name SharePointDomain -ErrorAction Stop
+$DIDDepartmentMapName = Get-AutomationVariable DIDDepartmentMapName -ErrorAction Stop
 $RBACListName = Get-AutomationVariable -Name RBACListName -ErrorAction Stop
 $ReportName = Get-AutomationVariable -Name ReportName -ErrorAction Stop
 
@@ -18,6 +19,8 @@ catch {
 $Owners = Get-PnPGroup "$Site Owners" -ErrorAction Stop
 "Getting Current RBAC List" | Write-Output
 $RBACList = Get-PnPList $RBACListName -ErrorAction Stop
+"Getting Current DID <-> Department List" | Write-Output
+$DIDDepartmentMap = Get-PnPList $DIDDepartmentMapName -ErrorAction Stop
 "Getting Current Report List" | Write-Output
 $ReportList = Get-PnPList $ReportName -ErrorAction Stop
 
@@ -31,7 +34,6 @@ if ($null -eq $LastRun -or $LastRun.AddYears(1) -lt [DateTime]::Today) {
 $ModifiedQuery = '<View><Query><Where><Geq><FieldRef Name="Modified"/><Value Type="DateTime" IncludeTimeValue="TRUE">{0:o}</Value></Geq></Where></Query>{{0}}</View>' -f $LastRun.ToUniversalTime()
 $LastRun = [DateTime]::Now
 $RBACFields = '<ViewFields><FieldRef Name="Identity"/><FieldRef Name="Modified"/><FieldRef Name="Department"/></ViewFields>'
-$ReportListFields = '<ViewFields><FieldRef Name="Id"/></ViewFields>'
 $DepartmentQuery = '<View><Query><Where><Eq><FieldRef Name="Department"/><Value Type="Text">{0}</Value></Eq></Where></Query></View>'
 $CurrentErrorCount = $Error.Count
 Get-PnPListItem -List $RBACList -Query ($ModifiedQuery -f $RBACFields) -PageSize 1000 -ScriptBlock { param($items) $items.Context.ExecuteQuery() } |
@@ -40,13 +42,25 @@ Get-PnPListItem -List $RBACList -Query ($ModifiedQuery -f $RBACFields) -PageSize
         $Department = $updated.FieldValues['Department']
         $d++
         $RBAC = $updated.FieldValues['Identity']
-        $DepQuery = $DepartmentQuery -f $Department, $ReportListFields
+        $DepQuery = $DepartmentQuery -f $Department
         Get-PnPListItem -List $ReportList -Query $DepQuery -PageSize 1000 -ScriptBlock { param($items) $items.Context.ExecuteQuery() } |
             ForEach-Object -Begin {$i=0} -Process {
                 $ID = $_.Id
                 Set-PnPListItemPermission -List $ReportList -Identity $Id -AddRole 'Full Control' -Group $Owners.Title -ClearExisting
                 if ($RBAC.Count -gt 0) {
                     $RBAC | ForEach-Object { Set-PnPListItemPermission -List $ReportList -Identity $Id -AddRole Read -User $_.Email }
+                }
+                $i++
+                if((++$j % 25) -eq 0) { "$Department $i rows processed ($j rows processed)" | Write-Output }
+            } -End {
+                "$Department $i rows processed ($j rows processed)" | Write-Output
+            }
+        Get-PnPListItem -List $DIDDepartmentMap -Query $DepQuery -PageSize 1000 -ScriptBlock { param($items) $items.Context.ExecuteQuery() } |
+            ForEach-Object -Begin {$i=0} -Process {
+                $ID = $_.Id
+                Set-PnPListItemPermission -List $DIDDepartmentMap -Identity $Id -AddRole 'Full Control' -Group $Owners.Title -ClearExisting
+                if ($RBAC.Count -gt 0) {
+                    $RBAC | ForEach-Object { Set-PnPListItemPermission -List $DIDDepartmentMap -Identity $Id -AddRole Read -User $_.Email }
                 }
                 $i++
                 if((++$j % 25) -eq 0) { "$Department $i rows processed ($j rows processed)" | Write-Output }
