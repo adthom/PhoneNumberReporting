@@ -7,6 +7,9 @@ param location string = resourceGroup().location
 @description('The location of the runbooks')
 param RunbookFileLocationBaseUri string = 'https://raw.githubusercontent.com/adthom/PhoneNumberReporting/main/Runbooks'
 
+@description('The SharePoint domain to use for the SharePoint Lists')
+param SharePointDomain string
+
 @description('The name of the DID <-> Department Map SharePoint List')
 param DIDDepartmentMap string = 'DID-Department Map'
 
@@ -16,12 +19,8 @@ param RBACList string = 'Report RBAC'
 @description('The name of the Report SharePoint List')
 param Report string = 'Phone Number Report'
 
-@description('The SharePoint domain to use for the SharePoint Lists')
-param SharePointDomain string = 'andthom'
-
 @description('The name of the SharePoint site to use for the SharePoint Lists')
 param Site string = 'PhoneNumberManagement'
-
 
 var verboseEnabled = true
 var progressEnabled = false
