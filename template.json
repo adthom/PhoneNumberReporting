@@ -1,0 +1,292 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.23.1.45101",
+      "templateHash": "18255898185502108227"
+    }
+  },
+  "parameters": {
+    "automationAccountName": {
+      "type": "string",
+      "defaultValue": "[format('{0}automation', resourceGroup().name)]",
+      "metadata": {
+        "description": "The name of the automation account"
+      }
+    },
+    "SharePointDomain": {
+      "type": "string",
+      "metadata": {
+        "description": "The SharePoint domain to use for the SharePoint Lists"
+      }
+    },
+    "Site": {
+      "type": "string",
+      "defaultValue": "PhoneNumberManagement",
+      "metadata": {
+        "description": "The name of the SharePoint site to use for the SharePoint Lists"
+      }
+    },
+    "RunbookFileLocationBaseUri": {
+      "type": "string",
+      "defaultValue": "https://raw.githubusercontent.com/adthom/PhoneNumberReporting/main/Runbooks/",
+      "metadata": {
+        "description": "The location of the runbooks"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "The location of the automation account, defaults to the resource group location"
+      }
+    },
+    "DIDDepartmentMap": {
+      "type": "string",
+      "defaultValue": "DID-Department Map",
+      "metadata": {
+        "description": "The name of the DID <-> Department Map SharePoint List"
+      }
+    },
+    "RBACList": {
+      "type": "string",
+      "defaultValue": "Report RBAC",
+      "metadata": {
+        "description": "The name of the RBAC SharePoint List"
+      }
+    },
+    "Report": {
+      "type": "string",
+      "defaultValue": "Phone Number Report",
+      "metadata": {
+        "description": "The name of the Report SharePoint List"
+      }
+    },
+    "scheduleStart": {
+      "type": "string",
+      "defaultValue": "[dateTimeAdd(utcNow(), 'PT1H')]",
+      "metadata": {
+        "description": "The time to start the schedule in ISO 8601 format, defaults to 1 hour from now, must be more than 5 minutes from now"
+      }
+    }
+  },
+  "variables": {
+    "verboseEnabled": true,
+    "progressEnabled": false,
+    "traceLevel": 0,
+    "powerShellVersion": "PowerShell",
+    "PSGalleryUri": "[format('https://devopsgallerystorage.blob.{0}/packages/', environment().suffixes.storage)]",
+    "neededModules": [
+      {
+        "name": "MicrosoftTeams",
+        "version": "5.8.1-preview"
+      },
+      {
+        "name": "PnP.PowerShell",
+        "version": "1.12.0"
+      }
+    ],
+    "neededVariables": [
+      {
+        "name": "DIDDepartmentMapName",
+        "description": "The name of the DID <-> Department Map SharePoint List",
+        "value": "[parameters('DIDDepartmentMap')]"
+      },
+      {
+        "name": "RBACListName",
+        "description": "The name of the RBAC SharePoint List",
+        "value": "[parameters('RBACList')]"
+      },
+      {
+        "name": "ReportName",
+        "description": "The name of the Report SharePoint List",
+        "value": "[parameters('Report')]"
+      },
+      {
+        "name": "SharePointDomain",
+        "description": "The SharePoint domain to use for the SharePoint Lists",
+        "value": "[parameters('SharePointDomain')]"
+      },
+      {
+        "name": "Site",
+        "description": "The name of the SharePoint site to use for the SharePoint Lists",
+        "value": "[parameters('Site')]"
+      },
+      {
+        "name": "RBACLastRun",
+        "description": "The last time the RBAC runbook was run",
+        "value": "[dateTimeFromEpoch(0)]"
+      }
+    ],
+    "neededAdhocRunbooks": [
+      "CreateLists"
+    ],
+    "neededScheduledRunbooks": [
+      {
+        "name": "UpdateRBAC",
+        "schedulename": "RBAC Update Schedule",
+        "schedule": {
+          "startTime": "[parameters('scheduleStart')]",
+          "interval": 4,
+          "frequency": "Hour"
+        }
+      },
+      {
+        "name": "UpdateDIDReportAssignments",
+        "schedulename": "Daily Update Assignments Schedule",
+        "schedule": {
+          "startTime": "[parameters('scheduleStart')]",
+          "interval": 1,
+          "frequency": "Day"
+        }
+      }
+    ]
+  },
+  "resources": [
+    {
+      "copy": {
+        "name": "modules",
+        "count": "[length(variables('neededModules'))]"
+      },
+      "type": "Microsoft.Automation/automationAccounts/modules",
+      "apiVersion": "2022-08-08",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), variables('neededModules')[copyIndex()].name)]",
+      "properties": {
+        "contentLink": {
+          "uri": "[uri(variables('PSGalleryUri'), format('{0}.{1}.nupkg', toLower(variables('neededModules')[copyIndex()].name), variables('neededModules')[copyIndex()].version))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+      ]
+    },
+    {
+      "copy": {
+        "name": "variables",
+        "count": "[length(variables('neededVariables'))]"
+      },
+      "type": "Microsoft.Automation/automationAccounts/variables",
+      "apiVersion": "2022-08-08",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), variables('neededVariables')[copyIndex()].name)]",
+      "properties": {
+        "description": "[variables('neededVariables')[copyIndex()].description]",
+        "isEncrypted": false,
+        "value": "[format('\"{0}\"', variables('neededVariables')[copyIndex()].value)]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+      ]
+    },
+    {
+      "copy": {
+        "name": "schedules",
+        "count": "[length(variables('neededScheduledRunbooks'))]"
+      },
+      "type": "Microsoft.Automation/automationAccounts/schedules",
+      "apiVersion": "2022-08-08",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), variables('neededScheduledRunbooks')[copyIndex()].schedulename)]",
+      "properties": "[variables('neededScheduledRunbooks')[copyIndex()].schedule]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+      ]
+    },
+    {
+      "copy": {
+        "name": "adhocRunbooks",
+        "count": "[length(variables('neededAdhocRunbooks'))]"
+      },
+      "type": "Microsoft.Automation/automationAccounts/runbooks",
+      "apiVersion": "2022-08-08",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), variables('neededAdhocRunbooks')[copyIndex()])]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "runbookType": "[variables('powerShellVersion')]",
+        "logVerbose": "[variables('verboseEnabled')]",
+        "logProgress": "[variables('progressEnabled')]",
+        "logActivityTrace": "[variables('traceLevel')]",
+        "publishContentLink": {
+          "uri": "[uri(parameters('RunbookFileLocationBaseUri'), format('{0}.ps1', variables('neededAdhocRunbooks')[copyIndex()]))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+        "modules",
+        "variables"
+      ]
+    },
+    {
+      "copy": {
+        "name": "scheduledRunbooks",
+        "count": "[length(variables('neededScheduledRunbooks'))]"
+      },
+      "type": "Microsoft.Automation/automationAccounts/runbooks",
+      "apiVersion": "2022-08-08",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), variables('neededScheduledRunbooks')[copyIndex()].name)]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "runbookType": "[variables('powerShellVersion')]",
+        "logVerbose": "[variables('verboseEnabled')]",
+        "logProgress": "[variables('progressEnabled')]",
+        "logActivityTrace": "[variables('traceLevel')]",
+        "publishContentLink": {
+          "uri": "[uri(parameters('RunbookFileLocationBaseUri'), format('{0}.ps1', variables('neededScheduledRunbooks')[copyIndex()].name))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+        "modules",
+        "schedules",
+        "variables"
+      ]
+    },
+    {
+      "copy": {
+        "name": "jobSchedules",
+        "count": "[length(variables('neededScheduledRunbooks'))]"
+      },
+      "type": "Microsoft.Automation/automationAccounts/jobSchedules",
+      "apiVersion": "2022-08-08",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), guid(variables('neededScheduledRunbooks')[copyIndex()].name))]",
+      "properties": {
+        "schedule": {
+          "name": "[variables('neededScheduledRunbooks')[copyIndex()].schedulename]"
+        },
+        "runbook": {
+          "name": "[variables('neededScheduledRunbooks')[copyIndex()].name]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+        "scheduledRunbooks",
+        "schedules"
+      ]
+    },
+    {
+      "type": "Microsoft.Automation/automationAccounts",
+      "apiVersion": "2022-08-08",
+      "name": "[parameters('automationAccountName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "publicNetworkAccess": true,
+        "disableLocalAuth": false,
+        "sku": {
+          "name": "Basic"
+        },
+        "encryption": {
+          "keySource": "Microsoft.Automation"
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "automationAccountIdentity": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2022-08-08', 'full').identity.principalId]"
+    }
+  }
+}
