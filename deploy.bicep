@@ -35,7 +35,7 @@ var PSGalleryUri = 'https://devopsgallerystorage.blob.${environment().suffixes.s
 var neededModules = [
     {
         name: 'MicrosoftTeams'
-        version: '5.8.1-preview'
+        version: '6.0.0'
     }
     {
         name: 'PnP.PowerShell'
