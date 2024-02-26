@@ -1,3 +1,6 @@
+#Requires -Version 7.2
+#Requires -Modules @{ModuleName='PnP.PowerShell';RequiredVersion='2.2.0'}
+[CmdletBinding()]
 param(
     [Parameter(Mandatory,ValueFromPipelineByPropertyName)]
     [string]

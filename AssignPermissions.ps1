@@ -1,4 +1,5 @@
-#Requires -Modules PnP.PowerShell, Microsoft.Graph.Identity.RoleManagement
+#Requires -Version 7.2
+#Requires -Modules @{ModuleName='PnP.PowerShell';RequiredVersion='2.2.0'}, @{ModuleName='Microsoft.Graph.Identity.Governance';RequiredVersion='2.10.0'}
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
@@ -32,7 +33,10 @@ $Role = @{
 }
 
 $ServicePrincipal = Get-PnPAzureADServicePrincipal @AutomationIdentity -ErrorAction Stop
-$RoleInfo = $ServicePrincipal | Add-PnPAzureADServicePrincipalAppRole @Role -ErrorAction Stop
+$RoleInfo = Get-PnPAzureADServicePrincipalAssignedAppRole -Principal $AutomationIdentity['ObjectId'] | Where-Object { $_.AppRoleName -eq $Role['AppRole'] }
+if (!$RoleInfo -or $RoleInfo.Count -eq 0) {
+    $RoleInfo = $ServicePrincipal | Add-PnPAzureADServicePrincipalAppRole @Role -ErrorAction Stop
+}
 $Permission = Grant-PnPAzureADAppSitePermission -Site $SiteUrl -Permissions Write -AppId $ServicePrincipal.AppId -DisplayName $ServicePrincipal.DisplayName -ErrorAction Stop
 Set-PnPAzureADAppSitePermission -Site $SiteUrl -Permissions FullControl -PermissionId $Permission.Id -ErrorAction Stop
 
