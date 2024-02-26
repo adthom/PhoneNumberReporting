@@ -1,9 +1,11 @@
 "Getting Variables" | Write-Output
-$Site = Get-AutomationVariable -Name Site -ErrorAction Stop
+$SiteDisplayName = Get-AutomationVariable -Name Site -ErrorAction Stop
 $DIDDepartmentMapName = Get-AutomationVariable DIDDepartmentMapName -ErrorAction Stop
 $SharePointDomain = Get-AutomationVariable -Name SharePointDomain -ErrorAction Stop
 $RBACListName = Get-AutomationVariable -Name RBACListName -ErrorAction Stop
 $ReportName = Get-AutomationVariable -Name ReportName -ErrorAction Stop
+
+$Site = $SiteDisplayName -replace '\s',''
 
 "Connecting to https://${SharePointDomain}.sharepoint.com/sites/${Site}" | Write-Output
 try {
@@ -16,7 +18,13 @@ catch {
 }
 
 "Getting Current Site Owners" | Write-Output
-$Owners = Get-PnPGroup "$Site Owners" -ErrorAction Stop
+try {
+    $Owners = Get-PnPGroup "$SiteDisplayName Owners" -ErrorAction Stop
+}
+catch {
+    Write-Error -ErrorRecord $_
+    throw
+}
 
 "Getting or Creating the DID <-> Department Map List" | Write-Output
 $DIDList = & {
