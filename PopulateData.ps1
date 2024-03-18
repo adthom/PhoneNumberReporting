@@ -65,13 +65,21 @@ end {
     Write-Information "Adding Departments to RBAC List"
     $batch = New-PnPBatch
     $DIDs.Department | Sort-Object -Unique | ForEach-Object { Add-PnPListItem -List $RBACList -Values @{Department=$_} -Batch $batch }
-    Invoke-PnPBatch -Batch $batch -ErrorAction Stop
+    Invoke-PnPBatch -Batch $batch
+    if ($batch.RequestCount -gt 0) {
+        Write-Warning "Batch Failed"
+        return
+    }
     Write-Information "Departments added to RBAC List"
 
     Write-Information "Adding items to DID <-> Department Map"
     $batch = New-PnPBatch
     $DIDs | ForEach-Object { Add-PnPListItem -List $DIDList -Values @{Department=$_.Department;DID=$_.DID} -Batch $batch }
-    Invoke-PnPBatch -Batch $batch -ErrorAction Stop
+    Invoke-PnPBatch -Batch $batch
+    if ($batch.RequestCount -gt 0) {
+        Write-Warning "Batch Failed"
+        return
+    }
     Write-Information "All items added to DID <-> Department Map"
     
     $DIDLookupList = @{}
@@ -80,6 +88,10 @@ end {
     Write-Information "Adding items to Report List"
     $batch = New-PnPBatch
     $DIDs | ForEach-Object { Add-PnPListItem -List $ReportList -Values @{ DID = $DIDLookupList[[double]$_.DID] } -Batch $batch }
-    Invoke-PnPBatch -Batch $batch -ErrorAction Stop
+    Invoke-PnPBatch -Batch $batch
+    if ($batch.RequestCount -gt 0) {
+        Write-Warning "Batch Failed"
+        return
+    }
     Write-Information "All items added to Report List"
 }
