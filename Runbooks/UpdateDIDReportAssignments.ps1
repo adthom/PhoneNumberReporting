@@ -1,7 +1,9 @@
 "Getting Variables" | Write-Output
-$Site = Get-AutomationVariable -Name Site -ErrorAction Stop
+$SiteDisplayName = Get-AutomationVariable -Name Site -ErrorAction Stop
 $SharePointDomain = Get-AutomationVariable -Name SharePointDomain -ErrorAction Stop
 $ReportName = Get-AutomationVariable -Name ReportName -ErrorAction Stop
+
+$Site = $SiteDisplayName -replace '\s',''
 
 "Connecting to https://${SharePointDomain}.sharepoint.com/sites/${Site}" | Write-Output
 try {
