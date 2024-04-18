@@ -48,6 +48,12 @@ do {
     }
 } while ($Results.Count -eq $GetPhoneNumberAssignmentParams['Top'])
 
+"Getting Current Cs Online Users" | Write-Output
+$OnlineUsers = @{}
+Get-CsOnlineUser -Filter 'LineUri -ne $null' -ErrorAction Stop | 
+    Select-Object Identity, UserPrincipalName, Department | 
+    Foreach-Object { $OnlineUsers[$_.Identity] = $_ }
+
 $batch = New-PnPBatch
 $CurrentErrorCount = $Error.Count
 "0 rows processed" | Write-Output
@@ -57,16 +63,20 @@ $ListResults | ForEach-Object -Begin { $i = 0 } -Process {
     $AssignmentInfo = $NumberLookup[$key]
     if ($NumberLookup.ContainsKey($key)) { $NumberLookup.Remove($key) }
     $AssignedIdentity = $null
-    $AssignedIdentity = if ($AssignmentInfo.AssignedPstnTargetId) { (Get-CsOnlineUser -Identity $AssignmentInfo.AssignedPstnTargetId).UserPrincipalName } else { $null }
+    $AssignedIdentity = if ($AssignmentInfo.AssignedPstnTargetId) { $OnlineUsers[$AssignmentInfo.AssignedPstnTargetId].UserPrincipalName } else { $null }
     if ($AssignedIdentity -ne $_.FieldValues['AssignedIdentity'].Email) {
         $changes++
         Set-PnPListItem -List $ReportList -Identity $_.Id -Values @{ AssignedIdentity = $AssignedIdentity } -Batch $batch
     }
     if ((++$i % 250) -eq 0) { "$i rows of $($ListResults.Count) processed" | Write-Output }
+    if ($batch.RequestCount -ge 250) {
+        "Invoking Batch" | Write-Output
+        Invoke-PnPBatch -Batch $batch -Force
+    }
 } -End { "$i rows of $($ListResults.Count) processed" | Write-Output }
 
 "Found $changes Changes" | Write-Output
-if ($changes.Count -gt 0) {
+if ($batch.RequestCount -gt 0 -and !$batch.Executed) {
     "Invoking Batch" | Write-Output
     Invoke-PnPBatch -Batch $batch -Force
 }
