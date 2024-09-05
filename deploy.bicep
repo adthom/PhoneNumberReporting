@@ -22,6 +22,13 @@ param RBACList string = 'Report RBAC'
 @description('The name of the Report SharePoint List')
 param Report string = 'Phone Number Report'
 
+@description('The Tenant ID of the SharePoint site (Guid or Domain)')
+param Tenant string
+
+@description('The environment of the SharePoint tenant')
+@allowed(['Production', 'PPE', 'China', 'Germany', 'USGovernment', 'USGovernmentHigh', 'USGovernmentDoD'])
+param Environment string = 'Production'
+
 @description('The time to start the schedule in ISO 8601 format, defaults to 1 hour from now, must be more than 5 minutes from now')
 param scheduleStart string = dateTimeAdd(utcNow(), 'PT1H')
 
@@ -30,12 +37,13 @@ var progressEnabled = false
 var traceLevel = 0
 var powerShellVersion = 'PowerShell'
 
-var PSGalleryUri = 'https://devopsgallerystorage.blob.${environment().suffixes.storage}/packages/'
+#disable-next-line no-hardcoded-env-urls // PSGallery Uri not available in all clouds
+var PSGalleryUri = 'https://devopsgallerystorage.blob.core.windows.net/packages/'
 
 var neededModules = [
     {
         name: 'MicrosoftTeams'
-        version: '6.0.0'
+        version: '6.1.0'
     }
     {
         name: 'PnP.PowerShell'
@@ -72,6 +80,16 @@ var neededVariables = [
         name: 'RBACLastRun'
         description: 'The last time the RBAC runbook was run'
         value: dateTimeFromEpoch(0)
+    }
+    {
+        name: 'Tenant'
+        description: 'The Tenant ID of the SharePoint site (Guid or Domain)'
+        value: Tenant
+    }
+    {
+        name: 'Environment'
+        description: 'The environment of the SharePoint tenant'
+        value: Environment
     }
 ]
 var neededAdhocRunbooks = [

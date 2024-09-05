@@ -16,19 +16,62 @@ param(
 
     [Parameter()]
     [string]
-    $TeamsAdminRoleName = 'Teams Communications Administrator'
+    $TeamsAdminRoleName = 'Teams Communications Administrator',
+
+    [ValidateSet('Production', 'PPE', 'China', 'Germany', 'USGovernment', 'USGovernmentHigh', 'USGovernmentDoD')]
+    [string]
+    $Environment = 'Production',
+
+    [Parameter()]
+    [string]
+    $Tenant
 )
 
-$SiteUrl = "https://${SharePointDomain}.sharepoint.com/sites/${Site}"
+$ConnectMgGraphParams = @{
+    Scopes      = @('RoleManagement.ReadWrite.Directory')
+    NoWelcome   = $true
+    ErrorAction = 'Stop'
+}
+$GraphEnvironmentName = switch ($Environment) {
+    'China' { 'China'; break }
+    'Germany' { 'Germany'; break }
+    'USGovernmentHigh' { 'USGov'; break }
+    'USGovernmentDoD' { 'USGovDoD'; break }
+    default { $null }
+}
+if ($GraphEnvironmentName) {
+    $ConnectMgGraphParams['Environment'] = $GraphEnvironmentName
+}
+
+Connect-MgGraph @ConnectMgGraphParams
+
+$SharepointTLD = switch ($Environment) {
+    'China' { 'sharepoint.cn'; break }
+    'USGovernmentHigh' { 'sharepoint.us'; break }
+    'USGovernmentDoD' { 'sharepoint-mil.us'; break }
+    default { 'sharepoint.com' }
+}
+
+$SiteUrl = "https://${SharePointDomain}.${SharepointTLD}/sites/${Site}"
+
+$ConnectPnPOnlineParams = @{
+    Url              = $SiteUrl
+    Interactive      = $true
+    AzureEnvironment = $Environment
+    ErrorAction      = 'Stop'
+}
+if ($Tenant) {
+    $ConnectPnPOnlineParams['Tenant'] = $Tenant
+}
+
 $AutomationIdentity = @{
     ObjectId = $AutomationAccountObjectId
 }
 
-Connect-PnPOnline -Url $SiteUrl -Interactive -ErrorAction Stop
-Connect-MgGraph -Scopes 'RoleManagement.ReadWrite.Directory' -NoWelcome -ErrorAction Stop
+Connect-PnPOnline @ConnectPnPOnlineParams
 
 $Role = @{
-    AppRole = 'Sites.Selected'
+    AppRole     = 'Sites.Selected'
     BuiltInType = 'SharePointOnline'
 }
 

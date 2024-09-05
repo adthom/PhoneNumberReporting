@@ -2,12 +2,12 @@
 #Requires -Modules @{ModuleName='PnP.PowerShell';RequiredVersion='2.2.0'}
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory,ValueFromPipelineByPropertyName)]
+    [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
     [string]
     $Department,
 
-    [Parameter(Mandatory,ValueFromPipelineByPropertyName)]
-    [ValidateRange(10000000000,19999999999)]
+    [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
+    [ValidateRange(10000000000, 19999999999)]
     [double]
     $DID,
 
@@ -33,11 +33,36 @@ param(
 
     [Parameter()]
     [switch]
-    $ClearExisting
+    $ClearExisting,
+
+    [ValidateSet('Production', 'PPE', 'China', 'Germany', 'USGovernment', 'USGovernmentHigh', 'USGovernmentDoD')]
+    [string]
+    $Environment = 'Production',
+
+    [Parameter()]
+    [string]
+    $Tenant
 )
 
 begin {
-    Connect-PnPOnline -Url "https://${SharePointDomain}.sharepoint.com/sites/${Site}" -Interactive -ErrorAction Stop
+    $SharepointTLD = switch ($Environment) {
+        'China' { 'sharepoint.cn'; break }
+        'USGovernmentHigh' { 'sharepoint.us'; break }
+        'USGovernmentDoD' { 'sharepoint-mil.us'; break }
+        default { 'sharepoint.com' }
+    }
+    
+    $ConnectPnPOnlineParams = @{
+        Url              = "https://${SharePointDomain}.${SharepointTLD}/sites/${Site}"
+        Interactive      = $true
+        AzureEnvironment = $Environment
+        ErrorAction      = 'Stop'
+    }
+    if ($Tenant) {
+        $ConnectPnPOnlineParams['Tenant'] = $Tenant
+    }
+
+    Connect-PnPOnline @ConnectPnPOnlineParams
     
     $DIDList = Get-PnPList -Identity $DIDDepartmentMapName
     $RBACList = Get-PnPList -Identity $RBACListName
@@ -47,9 +72,9 @@ begin {
 }
 process {
     $DIDs.Add([PSCustomObject]@{
-        Department = $Department
-        DID = $DID
-    })
+            Department = $Department
+            DID        = $DID
+        })
 }
 end {
     if ($ClearExisting) {
@@ -64,7 +89,7 @@ end {
 
     Write-Information "Adding Departments to RBAC List"
     $batch = New-PnPBatch
-    $DIDs.Department | Sort-Object -Unique | ForEach-Object { Add-PnPListItem -List $RBACList -Values @{Department=$_} -Batch $batch }
+    $DIDs.Department | Sort-Object -Unique | ForEach-Object { Add-PnPListItem -List $RBACList -Values @{Department = $_ } -Batch $batch }
     Invoke-PnPBatch -Batch $batch
     if ($batch.RequestCount -gt 0) {
         Write-Warning "Batch Failed"
@@ -74,7 +99,7 @@ end {
 
     Write-Information "Adding items to DID <-> Department Map"
     $batch = New-PnPBatch
-    $DIDs | ForEach-Object { Add-PnPListItem -List $DIDList -Values @{Department=$_.Department;DID=$_.DID} -Batch $batch }
+    $DIDs | ForEach-Object { Add-PnPListItem -List $DIDList -Values @{Department = $_.Department; DID = $_.DID } -Batch $batch }
     Invoke-PnPBatch -Batch $batch
     if ($batch.RequestCount -gt 0) {
         Write-Warning "Batch Failed"
@@ -83,7 +108,7 @@ end {
     Write-Information "All items added to DID <-> Department Map"
     
     $DIDLookupList = @{}
-    Get-PnPListItem -List $DIDList -Fields Id,DID -PageSize 1000 | ForEach-Object { $DIDLookupList[$_.FieldValues['DID']] = $_.Id }
+    Get-PnPListItem -List $DIDList -Fields Id, DID -PageSize 1000 | ForEach-Object { $DIDLookupList[$_.FieldValues['DID']] = $_.Id }
     
     Write-Information "Adding items to Report List"
     $batch = New-PnPBatch

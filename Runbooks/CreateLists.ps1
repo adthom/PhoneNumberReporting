@@ -4,13 +4,28 @@ $DIDDepartmentMapName = Get-AutomationVariable DIDDepartmentMapName -ErrorAction
 $SharePointDomain = Get-AutomationVariable -Name SharePointDomain -ErrorAction Stop
 $RBACListName = Get-AutomationVariable -Name RBACListName -ErrorAction Stop
 $ReportName = Get-AutomationVariable -Name ReportName -ErrorAction Stop
+$Environment = Get-AutomationVariable -Name Environment -ErrorAction Stop
+$Tenant = Get-AutomationVariable -Name Tenant -ErrorAction Stop
 
-$Site = $SiteDisplayName -replace '\s',''
+$Site = $SiteDisplayName -replace '\s', ''
+$SharepointTLD = switch ($Environment) {
+    'China' { 'sharepoint.cn'; break }
+    'USGovernmentHigh' { 'sharepoint.us'; break }
+    'USGovernmentDoD' { 'sharepoint-mil.us'; break }
+    default { 'sharepoint.com' }
+}
+$ConnectPnPOnlineParams = @{
+    Url              = "https://${SharePointDomain}.${SharepointTLD}/sites/${Site}"
+    ManagedIdentity  = $true
+    ErrorAction      = 'Stop'
+    AzureEnvironment = $Environment
+    Tenant           = $Tenant
+}
 
-"Connecting to https://${SharePointDomain}.sharepoint.com/sites/${Site}" | Write-Output
+"Connecting to $($ConnectPnPOnlineParams['Url'])" | Write-Output | Write-Output
 try {
-    $env:PNPPOWERSHELL_UPDATECHECK='Off'
-    $null = Connect-PnPOnline -Url "https://${SharePointDomain}.sharepoint.com/sites/${Site}" -ManagedIdentity -ErrorAction Stop
+    $env:PNPPOWERSHELL_UPDATECHECK = 'Off'
+    $null = Connect-PnPOnline @ConnectPnPOnlineParams
 }
 catch {
     Write-Error $_
@@ -43,7 +58,7 @@ $DIDList = & {
     
         $DepartmentField = Get-PnpField -List $DIDList -Identity Department -ErrorAction SilentlyContinue
         if ($null -eq $DepartmentField) {
-            $xml = '<Field Name="Department" StaticName="Department" Description="The Department which owns the DID" DisplayName="Department" ReadOnly="FALSE" Type="Text" FromBaseType="TRUE" />'
+            $xml = '<Field Name="Department" StaticName="Department" Description="The Department which owns the DID" DisplayName="Department" Indexed="TRUE" ReadOnly="FALSE" Type="Text" FromBaseType="TRUE" />'
             $Result = Add-PnPFieldFromXml -List $DIDList -FieldXml $xml
             $DepartmentField = Get-PnPField -Identity Department -List $DIDList -ErrorAction Stop
         }

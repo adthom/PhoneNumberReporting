@@ -2,57 +2,97 @@
 $SiteDisplayName = Get-AutomationVariable -Name Site -ErrorAction Stop
 $SharePointDomain = Get-AutomationVariable -Name SharePointDomain -ErrorAction Stop
 $ReportName = Get-AutomationVariable -Name ReportName -ErrorAction Stop
+$Environment = Get-AutomationVariable -Name Environment -ErrorAction Stop
+$Tenant = Get-AutomationVariable -Name Tenant -ErrorAction Stop
 
-$Site = $SiteDisplayName -replace '\s',''
+$Site = $SiteDisplayName -replace '\s', ''
+$SharepointTLD = switch ($Environment) {
+    'China' { 'sharepoint.cn'; break }
+    'USGovernmentHigh' { 'sharepoint.us'; break }
+    'USGovernmentDoD' { 'sharepoint-mil.us'; break }
+    default { 'sharepoint.com' }
+}
+$ConnectPnPOnlineParams = @{
+    Url              = "https://${SharePointDomain}.${SharepointTLD}/sites/${Site}"
+    ManagedIdentity  = $true
+    ErrorAction      = 'Stop'
+    AzureEnvironment = $Environment
+    Tenant           = $Tenant
+}
 
-"Connecting to https://${SharePointDomain}.sharepoint.com/sites/${Site}" | Write-Output
+"Connecting to $($ConnectPnPOnlineParams['Url'])" | Write-Output
 try {
-    $env:PNPPOWERSHELL_UPDATECHECK='Off'
-    $null = Connect-PnPOnline -Url "https://${SharePointDomain}.sharepoint.com/sites/${Site}" -ManagedIdentity -ErrorAction Stop
+    $env:PNPPOWERSHELL_UPDATECHECK = 'Off'
+    $null = Connect-PnPOnline @ConnectPnPOnlineParams
 }
 catch {
     Write-Error $_
     throw
+}
+
+$ConnectMicrosoftTeamsParams = @{
+    Identity    = $true
+    ErrorAction = 'Stop'
+}
+$TeamsEnvironmentName = switch ($Environment) {
+    'China' { 'TeamsChina'; break }
+    'USGovernmentHigh' { 'TeamsGCCH'; break }
+    'USGovernmentDoD' { 'TeamsDOD'; break }
+    default { $null }
+}
+if ($TeamsEnvironmentName) {
+    $ConnectMicrosoftTeamsParams['TeamsEnvironmentName'] = $TeamsEnvironmentName
 }
 
 "Connecting to MicrosoftTeams" | Write-Output
 try {
-    $null = Connect-MicrosoftTeams -Identity -ErrorAction Stop
+    $null = Connect-MicrosoftTeams @ConnectMicrosoftTeamsParams
 }
 catch {
     Write-Error $_
     throw
 }
 
-"Getting Current Phone Number Report And Items" | Write-Output
-$ReportList = Get-PnPList -Identity $ReportName -ErrorAction Stop
-$PhoneReportQuery = '<View><ViewFields><FieldRef Name="DID"/><FieldRef Name="Department"/><FieldRef Name="AssignedIdentity"/></ViewFields></View>'
-$ListResults = Get-PnPListItem -List $ReportList -Query $PhoneReportQuery -PageSize 1000
-
-$GetPhoneNumberAssignmentParams = @{
-    NumberType  = 'DirectRouting'
-    Top         = 1000
-    ErrorAction = 'Stop'
-}
-$NumberLookup = @{}
-do {
-    "Getting next $($GetPhoneNumberAssignmentParams['Top']) numbers" | Write-Output
-    $Results = @(try { Get-CsPhoneNumberAssignment @GetPhoneNumberAssignmentParams | Select-Object TelephoneNumber, AssignedPstnTargetId }catch { Write-Error $_; throw })
-    $GetPhoneNumberAssignmentParams['Skip'] = $GetPhoneNumberAssignmentParams['Top'] + $GetPhoneNumberAssignmentParams['Skip']
-    $Results | ForEach-Object {
-        $Number = $_.TelephoneNumber
-        $NumberLookup[$Number.TrimStart('+')] = [PSCustomObject]@{
-            Number               = $Number
-            AssignedPstnTargetId = $_.AssignedPstnTargetId
-        }
-    }
-} while ($Results.Count -eq $GetPhoneNumberAssignmentParams['Top'])
-
 "Getting Current Cs Online Users" | Write-Output
 $OnlineUsers = @{}
 Get-CsOnlineUser -Filter 'LineUri -ne $null' -ErrorAction Stop | 
-    Select-Object Identity, UserPrincipalName, Department | 
-    Foreach-Object { $OnlineUsers[$_.Identity] = $_ }
+Select-Object Identity, UserPrincipalName, Department | 
+Foreach-Object { $OnlineUsers[$_.Identity] = $_ }
+
+"Getting Current Phone Number Report And Items" | Write-Output
+$NumberLookup = @{}
+if (!TeamsEnvironmentName) {
+    $GetPhoneNumberAssignmentParams = @{
+        NumberType  = 'DirectRouting'
+        Top         = 1000
+        ErrorAction = 'Stop'
+    }
+    do {
+        "Getting next $($GetPhoneNumberAssignmentParams['Top']) numbers" | Write-Output
+        $Results = @(try { Get-CsPhoneNumberAssignment @GetPhoneNumberAssignmentParams | Select-Object TelephoneNumber, AssignedPstnTargetId } catch { Write-Error $_; throw })
+        $GetPhoneNumberAssignmentParams['Skip'] = $GetPhoneNumberAssignmentParams['Top'] + $GetPhoneNumberAssignmentParams['Skip']
+        $Results | ForEach-Object {
+            $Number = $_.TelephoneNumber
+            $NumberLookup[$Number.TrimStart('+')] = [PSCustomObject]@{
+                Number               = $Number
+                AssignedPstnTargetId = $_.AssignedPstnTargetId
+            }
+        }
+    } while ($Results.Count -eq $GetPhoneNumberAssignmentParams['Top'])
+}
+else {
+    foreach ($User in $OnlineUsers.Values) {
+        $Number = $User.LineUri -replace '^tel:', ''
+        $NumberLookup[$Number.TrimStart('+')] = [PSCustomObject]@{
+            Number               = $Number
+            AssignedPstnTargetId = $User.Identity
+        }
+    }
+}
+
+$ReportList = Get-PnPList -Identity $ReportName -ErrorAction Stop
+$PhoneReportQuery = '<View><ViewFields><FieldRef Name="DID"/><FieldRef Name="Department"/><FieldRef Name="AssignedIdentity"/></ViewFields></View>'
+$ListResults = Get-PnPListItem -List $ReportList -Query $PhoneReportQuery -PageSize 1000
 
 $batch = New-PnPBatch
 $CurrentErrorCount = $Error.Count

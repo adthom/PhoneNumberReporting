@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.23.1.45101",
-      "templateHash": "18255898185502108227"
+      "version": "0.27.1.19265",
+      "templateHash": "17323295442738480932"
     }
   },
   "parameters": {
@@ -64,6 +64,28 @@
         "description": "The name of the Report SharePoint List"
       }
     },
+    "Tenant": {
+      "type": "string",
+      "metadata": {
+        "description": "The Tenant ID of the SharePoint site (Guid or Domain)"
+      }
+    },
+    "Environment": {
+      "type": "string",
+      "defaultValue": "Production",
+      "allowedValues": [
+        "Production",
+        "PPE",
+        "China",
+        "Germany",
+        "USGovernment",
+        "USGovernmentHigh",
+        "USGovernmentDoD"
+      ],
+      "metadata": {
+        "description": "The environment of the SharePoint tenant"
+      }
+    },
     "scheduleStart": {
       "type": "string",
       "defaultValue": "[dateTimeAdd(utcNow(), 'PT1H')]",
@@ -77,7 +99,7 @@
     "progressEnabled": false,
     "traceLevel": 0,
     "powerShellVersion": "PowerShell",
-    "PSGalleryUri": "[format('https://devopsgallerystorage.blob.{0}/packages/', environment().suffixes.storage)]",
+    "PSGalleryUri": "https://devopsgallerystorage.blob.core.windows.net/packages/",
     "neededModules": [
       {
         "name": "MicrosoftTeams",
@@ -118,6 +140,16 @@
         "name": "RBACLastRun",
         "description": "The last time the RBAC runbook was run",
         "value": "[dateTimeFromEpoch(0)]"
+      },
+      {
+        "name": "Tenant",
+        "description": "The Tenant ID of the SharePoint site (Guid or Domain)",
+        "value": "[parameters('Tenant')]"
+      },
+      {
+        "name": "Environment",
+        "description": "The environment of the SharePoint tenant",
+        "value": "[parameters('Environment')]"
       }
     ],
     "neededAdhocRunbooks": [

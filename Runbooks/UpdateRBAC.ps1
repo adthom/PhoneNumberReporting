@@ -4,13 +4,28 @@ $SharePointDomain = Get-AutomationVariable -Name SharePointDomain -ErrorAction S
 $DIDDepartmentMapName = Get-AutomationVariable DIDDepartmentMapName -ErrorAction Stop
 $RBACListName = Get-AutomationVariable -Name RBACListName -ErrorAction Stop
 $ReportName = Get-AutomationVariable -Name ReportName -ErrorAction Stop
+$Environment = Get-AutomationVariable -Name Environment -ErrorAction Stop
+$Tenant = Get-AutomationVariable -Name Tenant -ErrorAction Stop
 
-$Site = $SiteDisplayName -replace '\s',''
+$Site = $SiteDisplayName -replace '\s', ''
+$SharepointTLD = switch ($Environment) {
+    'China' { 'sharepoint.cn'; break }
+    'USGovernmentHigh' { 'sharepoint.us'; break }
+    'USGovernmentDoD' { 'sharepoint-mil.us'; break }
+    default { 'sharepoint.com' }
+}
+$ConnectPnPOnlineParams = @{
+    Url              = "https://${SharePointDomain}.${SharepointTLD}/sites/${Site}"
+    ManagedIdentity  = $true
+    ErrorAction      = 'Stop'
+    AzureEnvironment = $Environment
+    Tenant           = $Tenant
+}
 
-"Connecting to https://${SharePointDomain}.sharepoint.com/sites/${Site}" | Write-Output
+"Connecting to $($ConnectPnPOnlineParams['Url'])" | Write-Output
 try {
-    $env:PNPPOWERSHELL_UPDATECHECK='Off'
-    $null = Connect-PnPOnline -Url "https://${SharePointDomain}.sharepoint.com/sites/${Site}" -ManagedIdentity -ErrorAction Stop
+    $env:PNPPOWERSHELL_UPDATECHECK = 'Off'
+    $null = Connect-PnPOnline @ConnectPnPOnlineParams
 }
 catch {
     Write-Error $_
@@ -33,19 +48,36 @@ if ($null -eq $LastRun -or $LastRun.AddYears(1) -lt [DateTime]::Today) {
     $LastRun = [DateTime]::Today.AddYears(-1)
 }
 "Getting All RBAC Changes Since $($LastRun.ToString('o'))" | Write-Output
-$ModifiedQuery = '<View><Query><Where><Geq><FieldRef Name="Modified"/><Value Type="DateTime" IncludeTimeValue="TRUE">{0:o}</Value></Geq></Where></Query>{{0}}</View>' -f $LastRun.ToUniversalTime()
+$ModifiedQuery = '<View><Query><Where><Geq><FieldRef Name="Modified"/><Value Type="DateTime" IncludeTimeValue="TRUE">{0:o}</Value></Geq></Where></Query>{{0}}</View>' -f $LastRun.AddHours(-7).ToUniversalTime()
 $LastRun = [DateTime]::Now
 $RBACFields = '<ViewFields><FieldRef Name="Identity"/><FieldRef Name="Modified"/><FieldRef Name="Department"/></ViewFields>'
-$DepartmentQuery = '<View><Query><Where><Eq><FieldRef Name="Department"/><Value Type="Text">{0}</Value></Eq></Where></Query></View>'
+
+try {
+    "Getting All Report Items" | Write-Output
+    $ReportItems = Get-PnPListItem -List $ReportList -PageSize 1000 -ErrorAction Stop
+}
+catch {
+    Write-Error $_
+    throw
+}
+
+try {
+    "Getting All DID <-> Department Items" | Write-Output
+    $DIDDepartmentItems = Get-PnPListItem -List $DIDDepartmentMap -PageSize 1000 -ErrorAction Stop
+}
+catch {
+    Write-Error $_
+    throw
+}
+
 $CurrentErrorCount = $Error.Count
 Get-PnPListItem -List $RBACList -Query ($ModifiedQuery -f $RBACFields) -PageSize 1000 -ScriptBlock { param($items) $items.Context.ExecuteQuery() } |
-    ForEach-Object -Begin {$j=0;$d=0} -Process {
+    ForEach-Object -Begin {$j=0;$k=0;$d=0} -Process {
         $updated = $_
         $Department = $updated.FieldValues['Department']
         $d++
         $RBAC = $updated.FieldValues['Identity']
-        $DepQuery = $DepartmentQuery -f $Department
-        Get-PnPListItem -List $ReportList -Query $DepQuery -PageSize 1000 -ScriptBlock { param($items) $items.Context.ExecuteQuery() } |
+        $ReportItems | Where-Object { $_.FieldValues['Department'].LookupValue -eq $Department } |
             ForEach-Object -Begin {$i=0} -Process {
                 $ID = $_.Id
                 Set-PnPListItemPermission -List $ReportList -Identity $Id -AddRole 'Full Control' -Group $Owners.Title -ClearExisting
@@ -53,24 +85,24 @@ Get-PnPListItem -List $RBACList -Query ($ModifiedQuery -f $RBACFields) -PageSize
                     $RBAC | ForEach-Object { Set-PnPListItemPermission -List $ReportList -Identity $Id -AddRole Read -User $_.Email }
                 }
                 $i++
-                if((++$j % 25) -eq 0) { "$Department $i rows processed ($j rows processed)" | Write-Output }
+                if((++$j % 25) -eq 0) { "$Department $i report rows processed ($j report rows and $k source rows rows processed)" | Write-Output }
             } -End {
-                "$Department $i rows processed ($j rows processed)" | Write-Output
+                "$Department $i report rows processed ($j report rows and $k source rows processed)" | Write-Output
             }
-        Get-PnPListItem -List $DIDDepartmentMap -Query $DepQuery -PageSize 1000 -ScriptBlock { param($items) $items.Context.ExecuteQuery() } |
+        $DIDDepartmentItems | Where-Object { $_.FieldValues['Department'] -eq $Department } |
             ForEach-Object -Begin {$i=0} -Process {
-                $ID = $_.Id
-                Set-PnPListItemPermission -List $DIDDepartmentMap -Identity $Id -AddRole 'Full Control' -Group $Owners.Title -ClearExisting
-                if ($RBAC.Count -gt 0) {
-                    $RBAC | ForEach-Object { Set-PnPListItemPermission -List $DIDDepartmentMap -Identity $Id -AddRole Read -User $_.Email }
+                    $ID = $_.Id
+                    Set-PnPListItemPermission -List $DIDDepartmentMap -Identity $Id -AddRole 'Full Control' -Group $Owners.Title -ClearExisting
+                    if ($RBAC.Count -gt 0) {
+                        $RBAC | ForEach-Object { Set-PnPListItemPermission -List $DIDDepartmentMap -Identity $Id -AddRole Read -User $_.Email }
+                    }
+                    $i++
+                    if((++$k % 25) -eq 0) { "$Department $i source rows processed ($j report rows and $k source rows processed)" | Write-Output }
+                } -End {
+                    "$Department $i source rows processed ($j report rows and $k source rows processed)" | Write-Output
                 }
-                $i++
-                if((++$j % 25) -eq 0) { "$Department $i rows processed ($j rows processed)" | Write-Output }
-            } -End {
-                "$Department $i rows processed ($j rows processed)" | Write-Output
-            }
     } -End {
-        "Processed $d RBAC changes ($j rows affected)" | Write-Output
+        "Processed $d RBAC changes ($j report rows and $k source rows affected)" | Write-Output
     }
 
 if ($CurrentErrorCount -lt $Error.Count) {
