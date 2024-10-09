@@ -64,12 +64,6 @@
         "description": "The name of the Report SharePoint List"
       }
     },
-    "Tenant": {
-      "type": "string",
-      "metadata": {
-        "description": "The Tenant ID of the SharePoint site (Guid or Domain)"
-      }
-    },
     "Environment": {
       "type": "string",
       "defaultValue": "Production",
@@ -103,7 +97,7 @@
     "neededModules": [
       {
         "name": "MicrosoftTeams",
-        "version": "6.0.0"
+        "version": "6.1.0"
       },
       {
         "name": "PnP.PowerShell",
@@ -140,11 +134,6 @@
         "name": "RBACLastRun",
         "description": "The last time the RBAC runbook was run",
         "value": "[dateTimeFromEpoch(0)]"
-      },
-      {
-        "name": "Tenant",
-        "description": "The Tenant ID of the SharePoint site (Guid or Domain)",
-        "value": "[parameters('Tenant')]"
       },
       {
         "name": "Environment",

@@ -22,9 +22,6 @@ param RBACList string = 'Report RBAC'
 @description('The name of the Report SharePoint List')
 param Report string = 'Phone Number Report'
 
-@description('The Tenant ID of the SharePoint site (Guid or Domain)')
-param Tenant string
-
 @description('The environment of the SharePoint tenant')
 @allowed(['Production', 'PPE', 'China', 'Germany', 'USGovernment', 'USGovernmentHigh', 'USGovernmentDoD'])
 param Environment string = 'Production'
@@ -80,11 +77,6 @@ var neededVariables = [
         name: 'RBACLastRun'
         description: 'The last time the RBAC runbook was run'
         value: dateTimeFromEpoch(0)
-    }
-    {
-        name: 'Tenant'
-        description: 'The Tenant ID of the SharePoint site (Guid or Domain)'
-        value: Tenant
     }
     {
         name: 'Environment'

@@ -11,11 +11,11 @@ param(
     [double]
     $DID,
 
-    [Parameter(Mandatory)]
+    [Parameter(Mandatory, HelpMessage='The subdomain of the SharePoint site that contains the report (e.g. use "contoso" for "contoso.sharepoint.com")')]
     [string]
     $SharePointDomain,
 
-    [Parameter(Mandatory)]
+    [Parameter(Mandatory, HelpMessage='The id of the SharePoint site that contains the report')]
     [string]
     $Site,
 
@@ -39,9 +39,13 @@ param(
     [string]
     $Environment = 'Production',
 
+    [Parameter(Mandatory)]
+    [string]
+    $PnPClientId,
+
     [Parameter()]
     [string]
-    $Tenant
+    $PnPTenant
 )
 
 begin {
@@ -57,13 +61,14 @@ begin {
         Interactive      = $true
         AzureEnvironment = $Environment
         ErrorAction      = 'Stop'
+        ClientId         = $PnPClientId
     }
-    if ($Tenant) {
-        $ConnectPnPOnlineParams['Tenant'] = $Tenant
+    if ($PnPTenant) {
+        $ConnectPnPOnlineParams['Tenant'] = $PnPTenant
     }
 
     Connect-PnPOnline @ConnectPnPOnlineParams
-    
+
     $DIDList = Get-PnPList -Identity $DIDDepartmentMapName
     $RBACList = Get-PnPList -Identity $RBACListName
     $ReportList = Get-PnPList -Identity $ReportName

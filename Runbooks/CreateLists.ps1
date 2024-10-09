@@ -5,7 +5,6 @@ $SharePointDomain = Get-AutomationVariable -Name SharePointDomain -ErrorAction S
 $RBACListName = Get-AutomationVariable -Name RBACListName -ErrorAction Stop
 $ReportName = Get-AutomationVariable -Name ReportName -ErrorAction Stop
 $Environment = Get-AutomationVariable -Name Environment -ErrorAction Stop
-$Tenant = Get-AutomationVariable -Name Tenant -ErrorAction Stop
 
 $Site = $SiteDisplayName -replace '\s', ''
 $SharepointTLD = switch ($Environment) {
@@ -18,8 +17,7 @@ $ConnectPnPOnlineParams = @{
     Url              = "https://${SharePointDomain}.${SharepointTLD}/sites/${Site}"
     ManagedIdentity  = $true
     ErrorAction      = 'Stop'
-    AzureEnvironment = $Environment
-    Tenant           = $Tenant
+    # AzureEnvironment = $Environment # This is not part of the parameter set in 1.12.0
 }
 
 "Connecting to $($ConnectPnPOnlineParams['Url'])" | Write-Output | Write-Output

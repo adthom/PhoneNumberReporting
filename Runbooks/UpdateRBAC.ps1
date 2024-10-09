@@ -5,7 +5,6 @@ $DIDDepartmentMapName = Get-AutomationVariable DIDDepartmentMapName -ErrorAction
 $RBACListName = Get-AutomationVariable -Name RBACListName -ErrorAction Stop
 $ReportName = Get-AutomationVariable -Name ReportName -ErrorAction Stop
 $Environment = Get-AutomationVariable -Name Environment -ErrorAction Stop
-$Tenant = Get-AutomationVariable -Name Tenant -ErrorAction Stop
 
 $Site = $SiteDisplayName -replace '\s', ''
 $SharepointTLD = switch ($Environment) {
@@ -18,8 +17,7 @@ $ConnectPnPOnlineParams = @{
     Url              = "https://${SharePointDomain}.${SharepointTLD}/sites/${Site}"
     ManagedIdentity  = $true
     ErrorAction      = 'Stop'
-    AzureEnvironment = $Environment
-    Tenant           = $Tenant
+    # AzureEnvironment = $Environment # This is not part of the parameter set in 1.12.0
 }
 
 "Connecting to $($ConnectPnPOnlineParams['Url'])" | Write-Output
@@ -33,7 +31,14 @@ catch {
 }
 
 "Getting Current Site Owners" | Write-Output
-$Owners = Get-PnPGroup "$SiteDisplayName Owners" -ErrorAction Stop
+$Owners = Get-PnPGroup -ErrorAction Stop | Where-Object { 
+    $_.Title -and $_.Title.EndsWith(' Owners')
+} | Sort-Object Id | Select-Object -First 1
+if (!$Owners) {
+    Write-Error "Could not find the Owners group"
+    throw
+}
+
 "Getting Current RBAC List" | Write-Output
 $RBACList = Get-PnPList $RBACListName -ErrorAction Stop
 "Getting Current DID <-> Department List" | Write-Output
@@ -82,7 +87,23 @@ Get-PnPListItem -List $RBACList -Query ($ModifiedQuery -f $RBACFields) -PageSize
                 $ID = $_.Id
                 Set-PnPListItemPermission -List $ReportList -Identity $Id -AddRole 'Full Control' -Group $Owners.Title -ClearExisting
                 if ($RBAC.Count -gt 0) {
-                    $RBAC | ForEach-Object { Set-PnPListItemPermission -List $ReportList -Identity $Id -AddRole Read -User $_.Email }
+                    $RBAC | ForEach-Object {
+                        $RBACItem = $_
+                        $IDParams = @{}
+                        if (![string]::IsNullOrEmpty($RBACItem.Email)) {
+                            $IDParams['User'] = $RBACItem.Email
+                        } else {
+                            $IDParams['Group'] = $RBACItem.LookupId
+                        }
+                        try {
+                            Set-PnPListItemPermission -List $ReportList -Identity $Id -AddRole Read @IDParams -ErrorAction Stop
+                        }
+                        catch {
+                            Write-Error $_
+                            $RBACItem | ConvertTo-Json -Compress
+                            $IDParams | ConvertTo-Json -Compress
+                        }
+                    }
                 }
                 $i++
                 if((++$j % 25) -eq 0) { "$Department $i report rows processed ($j report rows and $k source rows rows processed)" | Write-Output }
@@ -93,8 +114,22 @@ Get-PnPListItem -List $RBACList -Query ($ModifiedQuery -f $RBACFields) -PageSize
             ForEach-Object -Begin {$i=0} -Process {
                     $ID = $_.Id
                     Set-PnPListItemPermission -List $DIDDepartmentMap -Identity $Id -AddRole 'Full Control' -Group $Owners.Title -ClearExisting
-                    if ($RBAC.Count -gt 0) {
-                        $RBAC | ForEach-Object { Set-PnPListItemPermission -List $DIDDepartmentMap -Identity $Id -AddRole Read -User $_.Email }
+                    $RBAC | ForEach-Object {
+                        $RBACItem = $_
+                        $IDParams = @{}
+                        if (![string]::IsNullOrEmpty($RBACItem.Email)) {
+                            $IDParams['User'] = $RBACItem.Email
+                        } else {
+                            $IDParams['Group'] = $RBACItem.LookupId
+                        }
+                        try {
+                            Set-PnPListItemPermission -List $DIDDepartmentMap -Identity $Id -AddRole Read @IDParams -ErrorAction Stop
+                        }
+                        catch {
+                            Write-Error $_
+                            $RBACItem | ConvertTo-Json -Compress
+                            $IDParams | ConvertTo-Json -Compress
+                        }
                     }
                     $i++
                     if((++$k % 25) -eq 0) { "$Department $i source rows processed ($j report rows and $k source rows processed)" | Write-Output }
