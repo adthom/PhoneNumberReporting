@@ -83,7 +83,7 @@ process {
 }
 end {
     if ($ClearExisting) {
-        Write-Information "Clearing existing data"        
+        Write-Information "Clearing existing data"
         $batch = New-PnPBatch
         $RBACList | Get-PnPListItem | Remove-PnPListItem -List $RBACList -Batch $batch
         $DIDList | Get-PnPListItem | Remove-PnPListItem -List $DIDList -Batch $batch
@@ -92,9 +92,17 @@ end {
         Write-Information "Existing data cleared"
     }
 
+    Write-Information "Getting Current List Contents"
+    $RBACListItems = @{}
+    Get-PnPListItem -List $RBACList -Fields Id, Department -PageSize 1000 | ForEach-Object { $RBACListItems[$_.FieldValues['Department']] = $_.Id }
+    $DIDLookupList = @{}
+    Get-PnPListItem -List $DIDList -Fields Id, DID -PageSize 1000 | ForEach-Object { $DIDLookupList[$_.FieldValues['DID']] = $_.Id }
+    $ReportListItems = @{}
+    Get-PnPListItem -List $ReportList -Fields Id, DID -PageSize 1000 | ForEach-Object { $ReportListItems[[double]$_.FieldValues['DID'].LookupValue] = $_.Id }
+
     Write-Information "Adding Departments to RBAC List"
     $batch = New-PnPBatch
-    $DIDs.Department | Sort-Object -Unique | ForEach-Object { Add-PnPListItem -List $RBACList -Values @{Department = $_ } -Batch $batch }
+    $DIDs.Department | Sort-Object -Unique | Where-Object { !$RBACListItems.ContainsKey($_) } | ForEach-Object { Add-PnPListItem -List $RBACList -Values @{Department = $_ } -Batch $batch }
     Invoke-PnPBatch -Batch $batch
     if ($batch.RequestCount -gt 0) {
         Write-Warning "Batch Failed"
@@ -104,20 +112,19 @@ end {
 
     Write-Information "Adding items to DID <-> Department Map"
     $batch = New-PnPBatch
-    $DIDs | ForEach-Object { Add-PnPListItem -List $DIDList -Values @{Department = $_.Department; DID = $_.DID } -Batch $batch }
+    $DIDs | Where-Object { !$DIDLookupList.ContainsKey($_.DID) } | ForEach-Object { Add-PnPListItem -List $DIDList -Values @{Department = $_.Department; DID = $_.DID } -Batch $batch }
     Invoke-PnPBatch -Batch $batch
     if ($batch.RequestCount -gt 0) {
         Write-Warning "Batch Failed"
         return
     }
     Write-Information "All items added to DID <-> Department Map"
-    
-    $DIDLookupList = @{}
+
     Get-PnPListItem -List $DIDList -Fields Id, DID -PageSize 1000 | ForEach-Object { $DIDLookupList[$_.FieldValues['DID']] = $_.Id }
-    
+
     Write-Information "Adding items to Report List"
     $batch = New-PnPBatch
-    $DIDs | ForEach-Object { Add-PnPListItem -List $ReportList -Values @{ DID = $DIDLookupList[[double]$_.DID] } -Batch $batch }
+    $DIDs | Where-Object { !$ReportListItems.ContainsKey($_.DID) } | ForEach-Object { Add-PnPListItem -List $ReportList -Values @{ DID = $DIDLookupList[[double]$_.DID] } -Batch $batch }
     Invoke-PnPBatch -Batch $batch
     if ($batch.RequestCount -gt 0) {
         Write-Warning "Batch Failed"
